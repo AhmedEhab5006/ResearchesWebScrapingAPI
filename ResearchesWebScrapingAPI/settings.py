@@ -38,9 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-
-    # Local
-    'users',
+    'WebScraping',
 ]
 
 MIDDLEWARE = [
@@ -79,8 +77,8 @@ WSGI_APPLICATION = 'ResearchesWebScrapingAPI.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'Researches',
-        'USER': 'HelwanPortalSystem',
+        'NAME': 'HelwanPortalSystemResearches',
+        'USER': 'postgres',
         'PASSWORD': '12345',
         'HOST': 'localhost',     
         'PORT': '5432',         
