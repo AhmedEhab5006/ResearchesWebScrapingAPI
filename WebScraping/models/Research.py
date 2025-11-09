@@ -8,6 +8,9 @@ class Research(models.Model):
          editable=False         
     )
 
-    DOI = models.CharField(max_length = 100)
+    DOI = models.CharField(max_length = 100 , null=True, blank=True)
     Link = models.TextField()
-    Source = models.TextField()     
+    title = models.TextField()
+    Source = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+     

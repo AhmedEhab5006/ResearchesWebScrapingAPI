@@ -1,5 +1,5 @@
-from Repos import BaseRepo
-from Models import Research
+from ..Repos.BaseRepo import BaseRepo
+from ..models.Research import Research
 
 class ResarchRepo(BaseRepo):
       def __init__(self):

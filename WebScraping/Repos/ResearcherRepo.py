@@ -1,5 +1,5 @@
-from Repos import BaseRepo
-from Models import Researcher
+from ..Repos.BaseRepo import BaseRepo
+from ..models.Researcher import Researcher
 
 
 class ResearcherRepo(BaseRepo):
