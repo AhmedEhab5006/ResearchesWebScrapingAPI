@@ -107,7 +107,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                     )
 
                     if link_created:
-                        new_interests_payload.append({"name": interest_model.name})
+                        new_interests_payload.append({"Name": interest_model.name})
 
                 # -------------------------
                 # Researcher cites per year (track only NEW rows)
@@ -120,7 +120,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                     )
                     if created:
                         new_researcher_cites_payload.append(
-                            {"year": int(year), "noOfCitations": int(noOfCites) if noOfCites is not None else 0}
+                            {"Year": int(year), "NoOfCitations": int(noOfCites) if noOfCites is not None else 0}
                         )
                     else:
                         # optional: update if changed (doesn't count as "new")
@@ -226,8 +226,8 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                         cites_payload.append(
                             {
                                 "Id": None,
-                                "year": int(research_year),
-                                "numberOfCites": int(research_year_cites)
+                                "Year": int(research_year),
+                                "NumberOfCites": int(research_year_cites)
                                 if research_year_cites is not None
                                 else 0,
                             }
@@ -247,7 +247,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                                 "researcherNationalNumber": str(researcher_nationalNumber)
                                 if researcher_nationalNumber
                                 else None,
-                                "memberAcademicName": author_name,
+                                "MemberAcademicName": author_name,
                                 "memberOrcid": None,
                                 "memberPositionInSearch": str(idx),
                             }
@@ -256,27 +256,27 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                     new_researches_payload.append(
                         {
                             "DOI": "Not Avaliable",
-                            "title": title,
+                            "Title": title,
                             "Source": "Google Scholar",
-                            "pubYear": str(pub_year),
-                            "pubDate": None,  
-                            "journal": journal,
-                            "publisher": publisher,
-                            "noOfCititations": int(no_of_citiations)
+                            "PubYear": str(pub_year),
+                            "PubDate": None,  
+                            "Journal": journal,
+                            "Publisher": publisher,
+                            "NoOfCititations": int(no_of_citiations)
                             if no_of_citiations not in (None, "Unknown")
                             else 0,
-                            "isConfirmed": False,
+                            "IsConfirmed": False,
                             "created_at": str(research_obj.created_at)
                             if hasattr(research_obj, "created_at")
                             else None,
-                            "noOfPages": pages,
-                            "volume": volume,
-                            "number": number,
-                            "pubURL": str(external_url),
-                            "abstract": abstract,
-                            "relatedResearchURL": str(related_pub_url),
-                            "contributions": contributions_payload,
-                            "cites": cites_payload,
+                            "NoOfPages": pages,
+                            "Volume": volume,
+                            "Number": number,
+                            "ResearchLink": str(external_url),
+                            "Abstract": abstract,
+                            "RelatedResearchLink": str(related_pub_url),
+                            "Contributions": contributions_payload,
+                            "Cites": cites_payload,
                         }
                     )
 
@@ -291,21 +291,21 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             researcher_payload = {
                 "nationalNumber": researcher_instance.nationalNumber,
                 "ORCID": researcher_instance.ORCID,
-                "scholarProfileLink": str(researcher_instance.scholarProfileLink),
-                "academicName": researcher_instance.academicName,
+                "ScholarProfileLink": str(researcher_instance.scholarProfileLink),
+                "AcademicName": researcher_instance.academicName,
                 "scholarProfileImageURL": str(researcher_instance.scholarProfileImageURL),
-                "organisationalDomain": researcher_instance.organisationalDomain,
-                "jobTitle": researcher_instance.jobTitle,
-                "organisationId": str(researcher_instance.organisationId),
-                "totalNumberOfCitiations": researcher_instance.totalNumberOfCitiations,
-                "numberOfCitiationsInLastFiveYears": researcher_instance.numberOfCitiationsInLastFiveYears,
-                "hindex": researcher_instance.hindex,
-                "hindexInLastFiveYears": researcher_instance.hindexInLastFiveYears,
-                "i10index": researcher_instance.i10index,
-                "i10index5y": researcher_instance.i10index5y,
-                "researcherCites": new_researcher_cites_payload,
-                "interests": new_interests_payload,
-                "researches": new_researches_payload,
+                "OrganisationalDomain": researcher_instance.organisationalDomain,
+                "JobTitle": researcher_instance.jobTitle,
+                "OrganisationId": str(researcher_instance.organisationId),
+                "TotalNumberOfCitiations": researcher_instance.totalNumberOfCitiations,
+                "NumberOfCitiationsInLastFiveYears": researcher_instance.numberOfCitiationsInLastFiveYears,
+                "Hindex": researcher_instance.hindex,
+                "HindexInLastFiveYears": researcher_instance.hindexInLastFiveYears,
+                "I10index": researcher_instance.i10index,
+                "I10index5y": researcher_instance.i10index5y,
+                "ResearcherCites": new_researcher_cites_payload,
+                "Interests": new_interests_payload,
+                "Researches": new_researches_payload,
             }
 
             payload = researcher_payload
