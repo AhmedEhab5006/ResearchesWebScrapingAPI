@@ -28,6 +28,17 @@ class ResearchFetchingReponseHelper:
                 {"success": False, "message": "Researcher does not exist."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        elif result == FetchingResearchValidation.AlreadyExist:
+            return Response(
+                {"success": False, "message": "Researcher data already exist."},
+                status=status.HTTP_409_CONFLICT
+            )
+        elif result == FetchingResearchValidation.NoResearchesToAdd:
+            return Response(
+                {"success": True, "message": "No new Researches to be added"},
+                status=status.HTTP_204_NO_CONTENT
+            )
+        
         else:
             return Response(
                 {"success": False, "message": "Unknown error occurred."},

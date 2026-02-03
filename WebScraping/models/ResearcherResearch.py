@@ -4,7 +4,7 @@ class ResearcherResearch(models.Model):
     Researcher = models.ForeignKey(
         'Researcher',
         on_delete=models.CASCADE,
-        db_column='ResearcherId'
+        db_column='nationalNumber'
     )
     
     Research = models.ForeignKey(

@@ -5,4 +5,6 @@ class FetchingResearchValidation(Enum):
     ConnectionError = 2
     DatabaseError = 3
     ResearcherDoesnotExist = 4
+    AlreadyExist = 5
+    NoResearchesToAdd = 6
 

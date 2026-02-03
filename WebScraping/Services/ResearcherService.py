@@ -1,43 +1,9 @@
-from models import Researcher
-from Repos import ResearcherRepo
-from Serializers.ResearcherSerializer import (
-    ResearcherReadSerializer,
-    ResearcherCreateSerializer,
-    ResearcherUpdateSerializer
-)
+from ..Specifications.ResearcherSpecifcations import FieldEqualSpecification
+from ..models.Researcher import Researcher
+from ..Serializers.GetSerializers.ResearcherDataGetSerializer import ResearcherGetSerializer
 
-
-class ResearcherService:
-    def __init__(self):
-        self.repo = ResearcherRepo()
-
-    def get_all(self):
-        researchers = self.repo.get_all()
-        return ResearcherReadSerializer(researchers, many=True).data
-
-    def get_by_id(self, id):
-        researcher = self.repo.get_by_id(id)
-        if not researcher:
-            raise ValueError("Researcher not found")
-        return ResearcherReadSerializer(researcher).data
-
-    def create(self, data):
-        serializer = ResearcherCreateSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        researcher = serializer.save()
-        return ResearcherReadSerializer(researcher).data
-
-    def update(self, id, data):
-        researcher = self.repo.get_by_id(id)
-        if not researcher:
-            raise ValueError("Researcher not found")
-        serializer = ResearcherUpdateSerializer(researcher, data=data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        updated = serializer.save()
-        return ResearcherReadSerializer(updated).data
-
-    def delete(self, id):
-        deleted, _ = self.repo.delete(id)
-        if deleted == 0:
-            raise ValueError("Researcher not found")
-        return {"message": "Researcher deleted successfully"}
+def get_resercher_data (national_number):
+    spec = FieldEqualSpecification("nationalNumber" , national_number)
+    researcher = Researcher.objects.filter(spec.to_query())
+    serializer = ResearcherGetSerializer(researcher, many=True)
+    return serializer.data
