@@ -1,14 +1,6 @@
-from scholarly import scholarly
 import re
-import json
-from ..Serializers.JsonConverstion import JsonConvert
-from WebScraping.Repos.ResearcherRepo import ResearcherRepo
-from WebScraping.Repos.ResearcherResearchRepo import ResearcherResearchRepo
-from WebScraping.Repos.ResearcherInterestRepo import ResearcherInterestRepo
-from WebScraping.Repos.ResearcherCitesRepo import ResearcherCitesRepo
-from WebScraping.Repos.ResearchContributionsRepo import ResearchContributionsRepo
-from WebScraping.Repos.ResearchCitesRepo import ResearchCitesRepo
-from WebScraping.Repos.InterestRepo import InterestRepo
+from typing import Any, Dict, List, Tuple
+from django.db import transaction
 from WebScraping.models.Research import Research
 from ..Messaging.rabbitmq.publisher import publish_message
 from ..Messaging.rabbitmq.config import RK_PAPERS_INGEST_REQUESTED
@@ -20,12 +12,23 @@ from ..AppExceptions.AppError import (
     NoResearchesToAddError,
 )
 
+from WebScraping.Repos.ResearcherRepo import ResearcherRepo
+from WebScraping.Repos.ResearcherResearchRepo import ResearcherResearchRepo
+from WebScraping.Repos.ResearcherInterestRepo import ResearcherInterestRepo
+from WebScraping.Repos.ResearcherCitesRepo import ResearcherCitesRepo
+from WebScraping.Repos.ResearchContributionsRepo import ResearchContributionsRepo
+from WebScraping.Repos.ResearchCitesRepo import ResearchCitesRepo
+from WebScraping.Repos.InterestRepo import InterestRepo
+
+from ..utils.ScholarClient import ScholarClient
+from ..Services.PayloadBuilder import parse_coauthors, build_research_payload
+
 
 class FetchingResearchesByProfileLinkGoogleScholarService:
-    PAGE_SIZE = 50
-
     @classmethod
     def fetch_and_store_works(cls, profile_url: str, orcid, researcher_nationalNumber):
+        client = ScholarClient(min_delay=2.0, max_delay=5.0, max_retries=3)
+
         try:
             researcher_research_repo = ResearcherResearchRepo()
             researcher_repo = ResearcherRepo()
@@ -35,15 +38,15 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             research_contribution_repo = ResearchContributionsRepo()
             interest_repo = InterestRepo()
 
+            # parse author_id
             match = re.search(r"user=([a-zA-Z0-9_-]+)", str(profile_url))
             if not match:
                 raise InvalidInputError("Invalid Google Scholar profile link")
-
             author_id = match.group(1)
 
+            # fetch author
             try:
-                author = scholarly.search_author_id(author_id)
-                author = scholarly.fill(author, sections=["basics", "indices", "publications"])
+                author = client.fetch_author(author_id)
                 publications = author.get("publications", [])
             except Exception as e:
                 raise ConnectionError("Error fetching author data", extra={"reason": str(e)})
@@ -51,9 +54,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             if not publications:
                 raise NoResearchesFoundError("No researches found for this profile")
 
-            # =========================
-            # Author basics
-            # =========================
+            # author fields
             affiliation = author.get("affiliation")
             academicName = author.get("name")
             profilePicture = author.get("url_picture")
@@ -66,234 +67,288 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             i10index = author.get("i10index")
             i10indexInLastFiveYears = author.get("i10index5y")
             interests = author.get("interests", [])
-            citesPerYear = author.get("cites_per_year", {})
+            citesPerYear = author.get("cites_per_year", {}) or {}
 
-            # =========================
-            # Track ONLY new data to publish
-            # =========================
-            new_researches_payload = []
-            new_interests_payload = []
-            new_researcher_cites_payload = []
+            new_researches_payload: List[Dict[str, Any]] = []
+            new_interests_payload: List[Dict[str, Any]] = []
+            new_researcher_cites_payload: List[Dict[str, Any]] = []
 
             try:
-                researcher_instance, _ = researcher_repo.model.objects.get_or_create(
-                    nationalNumber=researcher_nationalNumber,
-                    scholarProfileLink=profile_url,
-                    academicName=academicName,
-                    scholarProfileImageURL=profilePicture,
-                    organisationalDomain=emailDomain,
-                    totalNumberOfCitiations=noOfCitations,
-                    numberOfCitiationsInLastFiveYears=noOfCitationsInLastFiveYears,
-                    hindex=hindex,
-                    hindexInLastFiveYears=hindexInLastFiveYears,
-                    i10index=i10index,
-                    i10index5y=i10indexInLastFiveYears,
-                    jobTitle=affiliation,
-                    organisationId=organizationId,
-                    ORCID=orcid,
-                )
-
-                # -------------------------
-                # Interests (track only NEW links)
-                # -------------------------
-                for interest in interests:
-                    interest_model, _interest_created = interest_repo.model.objects.get_or_create(
-                        name=interest
-                    )
-
-                    _link_obj, link_created = researcher_interest_repo.model.objects.get_or_create(
-                        interest=interest_model,
-                        researcher=researcher_instance,
-                    )
-
-                    if link_created:
-                        new_interests_payload.append({"Name": interest_model.name})
-
-                # -------------------------
-                # Researcher cites per year (track only NEW rows)
-                # -------------------------
-                for year, noOfCites in citesPerYear.items():
-                    obj, created = researcher_cites_repo.model.objects.get_or_create(
-                        researcher=researcher_instance,
-                        year=year,
-                        defaults={"noOfCitations": noOfCites},
-                    )
-                    if created:
-                        new_researcher_cites_payload.append(
-                            {"Year": int(year), "NoOfCitations": int(noOfCites) if noOfCites is not None else 0}
-                        )
-                    else:
-                        # optional: update if changed (doesn't count as "new")
-                        if obj.noOfCitations != noOfCites:
-                            obj.noOfCitations = noOfCites
-                            obj.save(update_fields=["noOfCitations"])
-
-                # -------------------------
-                # Publications loop
-                # Only add/store + publish if NEW research (by pubURL)
-                # -------------------------
-                count = 0
+                url_to_pub: Dict[str, Dict[str, Any]] = {}
+                candidate_urls: List[str] = []
 
                 for pub in publications:
-                    bib = pub.get("bib", {})
+                    url = client.get_pub_url_fast(pub)
+                    if url:
+                        url_to_pub[url] = pub
+                        candidate_urls.append(url)
 
-                    # ==========================================================
-                    # PERFORMANCE OPTIMIZATION (minimal change):
-                    # Only call scholarly.fill(pub) when needed
-                    # ==========================================================
-                    filled_pub = None
+                if not candidate_urls:
+                    raise NoResearchesFoundError("No reachable publication URLs found")
 
-                    title = bib.get("title", "Untitled")
-                    pub_year = bib.get("pub_year", "Unknown")
-                    no_of_citiations = pub.get("num_citations", 0)
-                    journal = bib.get("journal", "Unknown")
-                    abstract = bib.get("abstract", "Unknown")
-                    publisher = bib.get("publisher", "Unknown")
-                    volume = bib.get("volume", "Unknown")
-                    number = bib.get("number", "Unknown")
-                    pages = bib.get("pages", "Unknown")
+                # We only fill pubs that are NOT already in DB.
+                existing_urls = set(
+                    Research.objects.filter(pubURL__in=candidate_urls).values_list("pubURL", flat=True)
+                )
 
-                    # coauthors may come as string "A and B and C"
-                    coauthors = bib.get("author", [])
-                    if isinstance(coauthors, str):
-                        coauthors = [a.strip() for a in coauthors.split(" and ") if a.strip()]
-                    elif coauthors is None:
-                        coauthors = []
+                payload_buffer: List[Tuple] = []
+                research_to_create: List[Research] = []
 
-                    # Try to get external_url without fill (faster)
-                    external_url = pub.get("pub_url")
-
-                    if not external_url:
-                        filled_pub = scholarly.fill(pub)
-                        external_url = filled_pub.get("pub_url")
-
-                    # fallback: citation page
-                    if not external_url:
-                        author_pub_id = pub.get("author_pub_id")
-                        if author_pub_id:
-                            external_url = (
-                                "https://scholar.google.com/citations?"
-                                f"view_op=view_citation&citation_for_view={author_pub_id}"
-                            )
-
-                    if not external_url:
+                # FILL + EXTRACT HERE (outside transaction)
+                for url, pub in url_to_pub.items():
+                    if url in existing_urls:
                         continue
 
-                    # Skip if already exists (NOT new => do NOT publish it)
-                    if Research.objects.filter(pubURL=external_url).exists():
-                        continue
+                    # If you truly want "fill every new paper", this is fine.
+                    # (If fill_pub_if_needed decides not to fill because keys exist, you can replace it with: client.call(lambda: scholarly.fill(pub)))
+                    filled_pub = client.fill_pub_if_needed(
+                        pub,
+                        need_top_keys=["cites_per_year", "url_related_articles", "pub_url"],
+                        need_bib_keys=[
+                            "title", "pub_year", "author", "journal", "publisher",
+                            "abstract", "volume", "number", "pages"
+                        ],
+                    )
 
-                    # If we didn't fill before, but we need extra fields, fill now (only for NEW research)
-                    if filled_pub is None:
-                        filled_pub = scholarly.fill(pub)
+                    bib = filled_pub.get("bib", {}) or {}
 
-                    related_pub_url = filled_pub.get("url_related_articles", None)
+                    title = bib.get("title") or "Untitled"
+                    pub_year = bib.get("pub_year") or "Unknown"
+                    no_of_citations = filled_pub.get("num_citations", 0) or 0
+
+                    journal = bib.get("journal") or bib.get("venue") or bib.get("conference") or "Unknown"
+                    publisher = bib.get("publisher") or "Unknown"
+                    abstract = bib.get("abstract") or "Unknown"
+                    volume = bib.get("volume") or "Unknown"
+                    number = bib.get("number") or "Unknown"
+                    pages = bib.get("pages") or "Unknown"
+
+                    coauthors = parse_coauthors(bib)
+                    related_pub_url = filled_pub.get("url_related_articles")
                     cites_per_year = filled_pub.get("cites_per_year") or {}
 
-                    # Create Research row (NEW)
-                    research_obj = Research.objects.create(
-                        title=title,
-                        Source="GoogleScholar",
-                        pubYear=pub_year,
-                        publisher=publisher,
-                        DOI="Not Avaliable",
-                        noOfCititations=no_of_citiations if no_of_citiations is not None else 0,
-                        noOfPages=pages,
-                        volume=volume,
-                        number=number,
-                        pubURL=external_url,
-                        relatedResearchURL=related_pub_url,
-                        abstract=abstract,
-                        journal=journal,
+                    research_to_create.append(
+                        Research(
+                            title=title,
+                            Source="GoogleScholar",
+                            pubYear=str(pub_year),
+                            publisher=publisher,
+                            DOI="Not Avaliable",
+                            noOfCititations=int(no_of_citations),
+                            noOfPages=pages,
+                            volume=volume,
+                            number=number,
+                            pubURL=url,
+                            relatedResearchURL=related_pub_url,
+                            abstract=abstract,
+                            journal=journal,
+                        )
                     )
 
-                    # Link researcher <-> research
-                    if researcher_nationalNumber:
-                        researcher_research_repo.model.objects.create(
-                            Researcher=researcher_instance,
-                            Research=research_obj,
+                    payload_buffer.append(
+                        (
+                            url,
+                            title,
+                            pub_year,
+                            journal,
+                            publisher,
+                            no_of_citations,
+                            pages,
+                            volume,
+                            number,
+                            abstract,
+                            related_pub_url,
+                            coauthors,
+                            cites_per_year,
                         )
+                    )
 
-                    # Research cites per year (store) + payload list
-                    cites_payload = []
-                    for research_year, research_year_cites in (cites_per_year or {}).items():
-                        research_cites_repo.model.objects.create(
-                            research=research_obj,
-                            year=research_year,
-                            numberOfCites=research_year_cites,
-                        )
+                if not research_to_create:
+                    raise NoResearchesToAddError("No researches to add (already exist)")
 
-                        cites_payload.append(
-                            {
-                                "Id": None,
-                                "Year": int(research_year),
-                                "NumberOfCites": int(research_year_cites)
-                                if research_year_cites is not None
-                                else 0,
-                            }
-                        )
+            except (InvalidInputError, NoResearchesFoundError, NoResearchesToAddError):
+                raise
+            except Exception as e:
+                raise ConnectionError("Error while preparing publications", extra={"reason": str(e)})
 
-                    contributions_payload = []
-                    for idx, author_name in enumerate(coauthors, start=1):
-                        research_contribution_repo.model.objects.create(
-                            research=research_obj,
+            # ============================================
+            # 2) DB transaction ONLY (fast DB operations)
+            # ============================================
+            try:
+                with transaction.atomic():
+                    researcher_instance, _ = researcher_repo.model.objects.get_or_create(
+                        nationalNumber=researcher_nationalNumber,
+                        defaults={
+                            "scholarProfileLink": profile_url,
+                            "academicName": academicName,
+                            "scholarProfileImageURL": profilePicture,
+                            "organisationalDomain": emailDomain,
+                            "totalNumberOfCitiations": noOfCitations,
+                            "numberOfCitiationsInLastFiveYears": noOfCitationsInLastFiveYears,
+                            "hindex": hindex,
+                            "hindexInLastFiveYears": hindexInLastFiveYears,
+                            "i10index": i10index,
+                            "i10index5y": i10indexInLastFiveYears,
+                            "jobTitle": affiliation,
+                            "organisationId": organizationId,
+                            "ORCID": orcid,
+                        },
+                    )
+
+                    # update
+                    researcher_instance.scholarProfileLink = profile_url
+                    researcher_instance.academicName = academicName
+                    researcher_instance.scholarProfileImageURL = profilePicture
+                    researcher_instance.organisationalDomain = emailDomain
+                    researcher_instance.totalNumberOfCitiations = noOfCitations
+                    researcher_instance.numberOfCitiationsInLastFiveYears = noOfCitationsInLastFiveYears
+                    researcher_instance.hindex = hindex
+                    researcher_instance.hindexInLastFiveYears = hindexInLastFiveYears
+                    researcher_instance.i10index = i10index
+                    researcher_instance.i10index5y = i10indexInLastFiveYears
+                    researcher_instance.jobTitle = affiliation
+                    researcher_instance.organisationId = organizationId
+                    researcher_instance.ORCID = orcid
+                    researcher_instance.save()
+
+                    # interests
+                    for interest in interests:
+                        interest_model, _ = interest_repo.model.objects.get_or_create(name=interest)
+                        _link_obj, link_created = researcher_interest_repo.model.objects.get_or_create(
+                            interest=interest_model,
                             researcher=researcher_instance,
-                            memberAcademicName=author_name,
+                        )
+                        if link_created:
+                            new_interests_payload.append({"Name": interest_model.name})
+
+                    # researcher cites
+                    for year, noOfCites in citesPerYear.items():
+                        obj, created = researcher_cites_repo.model.objects.get_or_create(
+                            researcher=researcher_instance,
+                            year=year,
+                            defaults={"noOfCitations": noOfCites},
+                        )
+                        if created:
+                            new_researcher_cites_payload.append(
+                                {"Year": int(year), "NoOfCitations": int(noOfCites or 0)}
+                            )
+                        else:
+                            if obj.noOfCitations != noOfCites:
+                                obj.noOfCitations = noOfCites
+                                obj.save(update_fields=["noOfCitations"])
+
+                    # bulk create researches
+                    Research.objects.bulk_create(research_to_create, batch_size=200)
+
+                    # map created
+                    created_map = {
+                        r.pubURL: r
+                        for r in Research.objects.filter(pubURL__in=[r.pubURL for r in research_to_create])
+                    }
+
+                    links_to_create = []
+                    cites_to_create = []
+                    contribs_to_create = []
+
+                    for (
+                        url,
+                        title,
+                        pub_year,
+                        journal,
+                        publisher,
+                        no_of_citations,
+                        pages,
+                        volume,
+                        number,
+                        abstract,
+                        related_pub_url,
+                        coauthors,
+                        cites_per_year,
+                    ) in payload_buffer:
+                        research_obj = created_map[url]
+
+                        links_to_create.append(
+                            researcher_research_repo.model(
+                                Researcher=researcher_instance,
+                                Research=research_obj,
+                            )
                         )
 
-                        contributions_payload.append(
-                            {
-                                "Id": None,
-                                "researcherNationalNumber": str(researcher_nationalNumber)
-                                if researcher_nationalNumber
+                        cites_payload = []
+                        for y, c in (cites_per_year or {}).items():
+                            cites_to_create.append(
+                                research_cites_repo.model(
+                                    research=research_obj,
+                                    year=int(y),
+                                    numberOfCites=int(c or 0),
+                                )
+                            )
+                            cites_payload.append({"Id": None, "Year": int(y), "NumberOfCites": int(c or 0)})
+
+                        contributions_payload = []
+                        for idx, name in enumerate(coauthors, start=1):
+                            contribs_to_create.append(
+                                research_contribution_repo.model(
+                                    research=research_obj,
+                                    researcher=researcher_instance,
+                                    memberAcademicName=name,
+                                )
+                            )
+                            contributions_payload.append(
+                                {
+                                    "Id": None,
+                                    "researcherNationalNumber": str(researcher_nationalNumber)
+                                    if researcher_nationalNumber
+                                    else None,
+                                    "MemberAcademicName": name,
+                                    "memberOrcid": None,
+                                    "memberPositionInSearch": str(idx),
+                                }
+                            )
+
+                        new_researches_payload.append(
+                            build_research_payload(
+                                title=title,
+                                pub_year=str(pub_year),
+                                journal=journal,
+                                publisher=publisher,
+                                no_of_citations=int(no_of_citations or 0),
+                                pages=pages,
+                                volume=volume,
+                                number=number,
+                                external_url=url,
+                                abstract=abstract,
+                                related_pub_url=related_pub_url,
+                                contributions_payload=contributions_payload,
+                                cites_payload=cites_payload,
+                                created_at=str(research_obj.created_at)
+                                if hasattr(research_obj, "created_at")
                                 else None,
-                                "MemberAcademicName": author_name,
-                                "memberOrcid": None,
-                                "memberPositionInSearch": str(idx),
-                            }
+                            )
                         )
 
-                    new_researches_payload.append(
-                        {
-                            "DOI": "Not Avaliable",
-                            "Title": title,
-                            "Source": "Google Scholar",
-                            "PubYear": str(pub_year),
-                            "PubDate": None,  
-                            "Journal": journal,
-                            "Publisher": publisher,
-                            "NoOfCititations": int(no_of_citiations)
-                            if no_of_citiations not in (None, "Unknown")
-                            else 0,
-                            "IsConfirmed": False,
-                            "created_at": str(research_obj.created_at)
-                            if hasattr(research_obj, "created_at")
-                            else None,
-                            "NoOfPages": pages,
-                            "Volume": volume,
-                            "Number": number,
-                            "ResearchLink": str(external_url),
-                            "Abstract": abstract,
-                            "RelatedResearchLink": str(related_pub_url),
-                            "Contributions": contributions_payload,
-                            "Cites": cites_payload,
-                        }
+                    researcher_research_repo.model.objects.bulk_create(
+                        links_to_create, batch_size=500, ignore_conflicts=True
+                    )
+                    research_cites_repo.model.objects.bulk_create(
+                        cites_to_create, batch_size=500, ignore_conflicts=True
+                    )
+                    research_contribution_repo.model.objects.bulk_create(
+                        contribs_to_create, batch_size=500, ignore_conflicts=True
                     )
 
-                    count += 1
-
+            except (InvalidInputError, NoResearchesFoundError, NoResearchesToAddError):
+                raise
             except Exception as e:
                 raise DatabaseError("Error while fetching researches", extra={"reason": str(e)})
 
-            if count == 0 or len(new_researches_payload) == 0:
-                raise NoResearchesToAddError("No researches to add (already exist)")
-
+            # publish (outside transaction)
             researcher_payload = {
-                "nationalNumber": researcher_instance.nationalNumber,
+                "NationalNumber": researcher_instance.nationalNumber,
                 "ORCID": researcher_instance.ORCID,
                 "ScholarProfileLink": str(researcher_instance.scholarProfileLink),
                 "AcademicName": researcher_instance.academicName,
-                "scholarProfileImageURL": str(researcher_instance.scholarProfileImageURL),
+                "ScholarProfileImageURL": str(researcher_instance.scholarProfileImageURL),
                 "OrganisationalDomain": researcher_instance.organisationalDomain,
                 "JobTitle": researcher_instance.jobTitle,
                 "OrganisationId": str(researcher_instance.organisationId),
@@ -308,22 +363,17 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                 "Researches": new_researches_payload,
             }
 
-            payload = researcher_payload
             correlation_id = str(researcher_nationalNumber) if researcher_nationalNumber else None
-
             try:
                 publish_message(
                     routing_key=RK_PAPERS_INGEST_REQUESTED,
-                    payload=payload,
+                    payload=researcher_payload,
                     correlation_id=correlation_id,
                 )
             except Exception as e:
                 raise ConnectionError("Failed to publish message", extra={"reason": str(e)})
 
-            return {
-                "detail": "Added & Published",
-                "new_researches_count": len(new_researches_payload),
-            }
+            return {"detail": "Added & Published", "new_researches_count": len(new_researches_payload)}
 
         except (InvalidInputError, NoResearchesFoundError, ConnectionError, DatabaseError, NoResearchesToAddError):
             raise
