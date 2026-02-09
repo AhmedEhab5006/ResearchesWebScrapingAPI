@@ -31,6 +31,8 @@ class ResearchContributions(models.Model):
     memberOrcid = models.TextField(null=True, blank=True)
     memberPositionInSearch = models.TextField(null=True, blank=True)
     memberAcademicName = models.TextField() 
+    memberScholarProfileURL = models.TextField(null=True, blank=True) 
+
 
     class Meta:
             db_table = 'ResearchContributions'   

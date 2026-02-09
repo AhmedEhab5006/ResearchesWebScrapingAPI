@@ -1,14 +1,33 @@
 from typing import Any, Dict, List, Tuple
+from itertools import zip_longest
 
 
-def parse_coauthors(bib: Dict[str, Any]) -> List[str]:
-    coauthors = bib.get("author") or []
-    if isinstance(coauthors, str):
-        return [a.strip() for a in coauthors.split(" and ") if a.strip()]
-    if isinstance(coauthors, list):
-        return [str(a).strip() for a in coauthors if str(a).strip()]
-    return []
+def parse_coauthors(author_field, author_ids):
+    names = []
 
+    if not author_field:
+        return []
+
+    if isinstance(author_field, str):
+        names = [a.strip() for a in author_field.split(" and ") if a.strip()]
+    elif isinstance(author_field, list):
+        names = [str(a).strip() for a in author_field if str(a).strip()]
+
+    author_ids = author_ids or []
+
+    coauthors = []
+
+    for name, sid in zip_longest(names, author_ids, fillvalue=None):
+        coauthors.append({
+            "academic_name": name,
+            "scholar_id": sid,
+            "profile_url": (
+                f"https://scholar.google.com/citations?hl=en&user={sid}"
+                if sid else None
+            )
+        })
+
+    return coauthors
 
 def build_research_payload(
     *,

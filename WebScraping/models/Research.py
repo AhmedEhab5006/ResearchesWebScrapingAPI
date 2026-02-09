@@ -25,6 +25,7 @@ class Research(models.Model):
     pubURL = models.TextField(blank=True , null = True)
     abstract = models.TextField(blank=True , null = True)
     relatedResearchURL = models.TextField(blank=True , null = True)
+
     
     class Meta:
         db_table = 'Researches'

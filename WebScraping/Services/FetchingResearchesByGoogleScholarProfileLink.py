@@ -38,13 +38,11 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             research_contribution_repo = ResearchContributionsRepo()
             interest_repo = InterestRepo()
 
-            # parse author_id
             match = re.search(r"user=([a-zA-Z0-9_-]+)", str(profile_url))
             if not match:
                 raise InvalidInputError("Invalid Google Scholar profile link")
             author_id = match.group(1)
 
-            # fetch author
             try:
                 author = client.fetch_author(author_id)
                 publications = author.get("publications", [])
@@ -123,7 +121,11 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                     number = bib.get("number") or "Unknown"
                     pages = bib.get("pages") or "Unknown"
 
-                    coauthors = parse_coauthors(bib)
+                    coauthors = parse_coauthors(
+                            bib.get("author"),
+                            filled_pub.get("author_id", [])
+                        )
+                    
                     related_pub_url = filled_pub.get("url_related_articles")
                     cites_per_year = filled_pub.get("cites_per_year") or {}
 
@@ -142,6 +144,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                             relatedResearchURL=related_pub_url,
                             abstract=abstract,
                             journal=journal,
+                            
                         )
                     )
 
@@ -286,13 +289,14 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                             cites_payload.append({"Id": None, "Year": int(y), "NumberOfCites": int(c or 0)})
 
                         contributions_payload = []
-                        for idx, name in enumerate(coauthors, start=1):
+                        for idx, member in enumerate(coauthors, start=1):
                             contribs_to_create.append(
                                 research_contribution_repo.model(
                                     research=research_obj,
                                     researcher=researcher_instance,
-                                    memberAcademicName=name,
-                                )
+                                    memberAcademicName=member["academic_name"],
+                                    memberScholarProfileURL=member["scholar_id"],  
+                                )  
                             )
                             contributions_payload.append(
                                 {
@@ -300,9 +304,10 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                                     "researcherNationalNumber": str(researcher_nationalNumber)
                                     if researcher_nationalNumber
                                     else None,
-                                    "MemberAcademicName": name,
+                                    "MemberAcademicName": member["academic_name"],
                                     "memberOrcid": None,
                                     "memberPositionInSearch": str(idx),
+                                    "MemberScholarId":member["scholar_id"]
                                 }
                             )
 
