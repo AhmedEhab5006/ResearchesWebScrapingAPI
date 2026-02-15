@@ -376,6 +376,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                     correlation_id=correlation_id,
                 )
             except Exception as e:
+                print(e)
                 raise ConnectionError("Failed to publish message", extra={"reason": str(e)})
 
             return {"detail": "Added & Published", "new_researches_count": len(new_researches_payload)}
