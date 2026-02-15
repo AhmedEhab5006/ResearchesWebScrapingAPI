@@ -75,5 +75,5 @@ class ScholarClient:
                     break
 
         if missing:
-            return self.call(lambda: scholarly.fill(pub))  # fills bib + extra fields
+            return self.call(lambda: scholarly.fill(pub))  
         return pub

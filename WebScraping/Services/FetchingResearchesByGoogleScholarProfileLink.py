@@ -34,6 +34,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
         client = ScholarClient(min_delay=2.0, max_delay=5.0, max_retries=3)
         cache_service.set(f"researcher:{researcher_nationalNumber}:scholar", profile_url)
         cache_service.set(f"researcher:{researcher_nationalNumber}:orcid", orcid)
+        print(type(researcher_nationalNumber))
 
         try:
             researcher_research_repo = ResearcherResearchRepo()

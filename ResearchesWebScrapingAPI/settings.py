@@ -53,10 +53,13 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
-    "EXCEPTION_HANDLER":'WebScraping.Middlewares.GlobalExceptionMiddleware.custom_exception_handler'
-
+    "DEFAULT_THROTTLE_RATES": {
+        "scholar_nn": "6/hour",
+        "scholar_profile": "2/hour",
+        "scholar_global": "8/min",
+    },
+    "EXCEPTION_HANDLER": "WebScraping.Middlewares.GlobalExceptionMiddleware.custom_exception_handler",
 }
-
 ROOT_URLCONF = 'ResearchesWebScrapingAPI.urls'
 
 TEMPLATES = [
