@@ -12,7 +12,6 @@ class ResearcherLinksView(APIView):
         nationalNumber = ResearcherSearchByNationalNumberSerializer(**request.data)
         scholarLink = cache_service.get(f"researcher:{nationalNumber.national_number}:scholar")
         orcid = cache_service.get(f"researcher:{nationalNumber.national_number}:orcid")
-        print(orcid)
 
         if orcid == None or scholarLink == None:
             return Response(
