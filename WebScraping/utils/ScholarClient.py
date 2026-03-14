@@ -29,8 +29,10 @@ class ScholarClient:
     def fetch_author(self, author_id: str) -> Dict[str, Any]:
         try: 
             author = self.call(lambda: scholarly.search_author_id(author_id))
-            author = self.call(lambda: scholarly.fill(author, sections=["basics", "indices", "counts"]))
+            author = self.call(lambda: scholarly.fill(author, sections=["basics", "indices", "counts" , "coauthors"]))
             author = self.call(lambda: scholarly.fill(author, sections=["publications"]))
+            author = self.call(lambda: scholarly.fill(author))
+
             return author
         except Exception as e:
             print(e)
@@ -77,3 +79,26 @@ class ScholarClient:
         if missing:
             return self.call(lambda: scholarly.fill(pub))  
         return pub
+    
+    
+    
+    def fill_author_if_needed(
+        self,
+        author: Dict[str, Any],
+        need_keys: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+
+        need_keys = need_keys or []
+
+        missing = False
+
+        for k in need_keys:
+            v = author.get(k)
+            if v is None or v == "" or v == {}:
+                missing = True
+                break
+
+        if missing:
+            return self.call(lambda: scholarly.fill(author))
+
+        return author

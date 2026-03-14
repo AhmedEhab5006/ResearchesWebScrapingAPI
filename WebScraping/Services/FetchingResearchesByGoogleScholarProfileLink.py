@@ -15,7 +15,6 @@ from ..AppExceptions.AppError import (
 from .CacheService import CacheService
 cache_service = CacheService(default_timeout=60 * 15)
 
-
 from WebScraping.Repos.ResearcherRepo import ResearcherRepo
 from WebScraping.Repos.ResearcherResearchRepo import ResearcherResearchRepo
 from WebScraping.Repos.ResearcherInterestRepo import ResearcherInterestRepo
@@ -23,6 +22,8 @@ from WebScraping.Repos.ResearcherCitesRepo import ResearcherCitesRepo
 from WebScraping.Repos.ResearchContributionsRepo import ResearchContributionsRepo
 from WebScraping.Repos.ResearchCitesRepo import ResearchCitesRepo
 from WebScraping.Repos.InterestRepo import InterestRepo
+from WebScraping.Repos.CoAuthorRepo import CoAuthorRepo
+from WebScraping.Repos.ResearcherCoAuthorRepo import ResearcherCoAuthorRepo
 
 from ..utils.ScholarClient import ScholarClient
 from ..Services.PayloadBuilder import parse_coauthors, build_research_payload
@@ -31,7 +32,7 @@ from ..Services.PayloadBuilder import parse_coauthors, build_research_payload
 class FetchingResearchesByProfileLinkGoogleScholarService:
     @classmethod
     def fetch_and_store_works(cls, profile_url: str, orcid, researcher_nationalNumber):
-        client = ScholarClient(min_delay=2.0, max_delay=5.0, max_retries=3)
+        client = ScholarClient(min_delay=20.0, max_delay=50.0, max_retries=5)
         cache_service.set(f"researcher:{researcher_nationalNumber}:scholar", profile_url)
         cache_service.set(f"researcher:{researcher_nationalNumber}:orcid", orcid)
         print(type(researcher_nationalNumber))
@@ -44,6 +45,8 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             research_cites_repo = ResearchCitesRepo()
             research_contribution_repo = ResearchContributionsRepo()
             interest_repo = InterestRepo()
+            co_author_repo = CoAuthorRepo()
+            researcher_co_author_repo = ResearcherCoAuthorRepo()
 
             match = re.search(r"user=([a-zA-Z0-9_-]+)", str(profile_url))
             if not match:
@@ -53,6 +56,20 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             try:
                 author = client.fetch_author(author_id)
                 publications = author.get("publications", [])
+                authorCoAuthors = author.get("coauthors", [])
+                coAuthorsProfiles: List[Dict[str, Any]] = []
+
+                for coauthor in authorCoAuthors:
+                    scholar_id = coauthor.get("scholar_id")
+
+                    if scholar_id:
+                        profile = client.fetch_author(scholar_id)
+                        profile = client.fill_author_if_needed(
+                            profile,
+                            need_keys=["name", "affiliation", "url_picture"],
+                        )
+                        coAuthorsProfiles.append(profile)
+
             except Exception as e:
                 raise ConnectionError("Error fetching author data", extra={"reason": str(e)})
 
@@ -78,6 +95,9 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             new_interests_payload: List[Dict[str, Any]] = []
             new_researcher_cites_payload: List[Dict[str, Any]] = []
 
+            # THIS is the co-authors list you asked for (attached to researcher payload)
+            co_authors_payload: List[Dict[str, Any]] = []
+
             try:
                 url_to_pub: Dict[str, Dict[str, Any]] = {}
                 candidate_urls: List[str] = []
@@ -91,7 +111,6 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                 if not candidate_urls:
                     raise NoResearchesFoundError("No reachable publication URLs found")
 
-                # We only fill pubs that are NOT already in DB.
                 existing_urls = set(
                     Research.objects.filter(pubURL__in=candidate_urls).values_list("pubURL", flat=True)
                 )
@@ -99,26 +118,30 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                 payload_buffer: List[Tuple] = []
                 research_to_create: List[Research] = []
 
-                # FILL + EXTRACT HERE (outside transaction)
                 for url, pub in url_to_pub.items():
                     if url in existing_urls:
                         continue
 
-                    # If you truly want "fill every new paper", this is fine.
-                    # (If fill_pub_if_needed decides not to fill because keys exist, you can replace it with: client.call(lambda: scholarly.fill(pub)))
                     filled_pub = client.fill_pub_if_needed(
                         pub,
                         need_top_keys=["cites_per_year", "url_related_articles", "pub_url"],
                         need_bib_keys=[
-                            "title", "pub_year", "author", "journal", "publisher",
-                            "abstract", "volume", "number", "pages"
+                            "title",
+                            "pub_year",
+                            "author",
+                            "journal",
+                            "publisher",
+                            "abstract",
+                            "volume",
+                            "number",
+                            "pages",
                         ],
                     )
 
                     bib = filled_pub.get("bib", {}) or {}
 
                     title = bib.get("title") or "Untitled"
-                    pub_year = bib.get("pub_year") or "Unknown"
+                    pub_year = bib.get("pub_year")
                     no_of_citations = filled_pub.get("num_citations", 0) or 0
 
                     journal = bib.get("journal") or bib.get("venue") or bib.get("conference") or "Unknown"
@@ -128,11 +151,8 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                     number = bib.get("number") or "Unknown"
                     pages = bib.get("pages") or "Unknown"
 
-                    coauthors = parse_coauthors(
-                            bib.get("author"),
-                            filled_pub.get("author_id", [])
-                        )
-                    
+                    coauthors = parse_coauthors(bib.get("author"), filled_pub.get("author_id", []))
+
                     related_pub_url = filled_pub.get("url_related_articles")
                     cites_per_year = filled_pub.get("cites_per_year") or {}
 
@@ -140,7 +160,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                         Research(
                             title=title,
                             Source="GoogleScholar",
-                            pubYear=str(pub_year),
+                            pubYear=int(pub_year),
                             publisher=publisher,
                             DOI="Not Avaliable",
                             noOfCititations=int(no_of_citations),
@@ -151,7 +171,6 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                             relatedResearchURL=related_pub_url,
                             abstract=abstract,
                             journal=journal,
-                            
                         )
                     )
 
@@ -181,9 +200,6 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             except Exception as e:
                 raise ConnectionError("Error while preparing publications", extra={"reason": str(e)})
 
-            # ============================================
-            # 2) DB transaction ONLY (fast DB operations)
-            # ============================================
             try:
                 with transaction.atomic():
                     researcher_instance, _ = researcher_repo.model.objects.get_or_create(
@@ -247,10 +263,71 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                                 obj.noOfCitations = noOfCites
                                 obj.save(update_fields=["noOfCitations"])
 
-                    # bulk create researches
+                    if coAuthorsProfiles:
+                        coauthor_links_to_create = []
+
+                        for co_profile in coAuthorsProfiles:
+                            scholar_id = co_profile.get("scholar_id")
+                            if not scholar_id:
+                                continue
+
+                            co_name = co_profile.get("name") or "Unknown"
+                            co_affiliation = co_profile.get("affiliation")
+                            co_picture = co_profile.get("url_picture")
+                            co_email_domain = co_profile.get("email_domain")
+                            co_org = co_profile.get("organization")
+                            co_citedby = co_profile.get("citedby")
+                            co_hindex = co_profile.get("hindex")
+                            co_i10 = co_profile.get("i10index")
+
+                            co_author_obj, _created = co_author_repo.model.objects.get_or_create(
+                                scholarProfileLink=str(scholar_id),
+                                defaults={
+                                    "academicName": co_name,
+                                    "jobTitle": co_affiliation,
+                                    "scholarProfileImageURL": co_picture
+                                }     
+                            )
+
+                            dirty_fields = []
+                            if getattr(co_author_obj, "academicName", None) != co_name:
+                                co_author_obj.academicName = co_name
+                                dirty_fields.append("jobTitle")
+                            if hasattr(co_author_obj, "jobTitle") and getattr(co_author_obj, "jobTitle", None) != co_affiliation:
+                                co_author_obj.affiliation = co_affiliation
+                                dirty_fields.append("jobTitle")
+                            if hasattr(co_author_obj, "scholarProfileImageURL") and getattr(co_author_obj, "scholarProfileImageURL", None) != co_picture:
+                                co_author_obj.profileImageURL = co_picture
+                                dirty_fields.append("scholarProfileImageURL")
+                         
+                            if dirty_fields:
+                                co_author_obj.save(update_fields=dirty_fields)
+
+                            coauthor_links_to_create.append(
+                                researcher_co_author_repo.model(
+                                    Researcher=researcher_instance,
+                                    CoAuthor=co_author_obj,
+                                )
+                            )
+
+                            co_authors_payload.append(
+                                {
+                                    "ScholarProfileLink": f"https://scholar.google.com/citations?hl=ar&user={scholar_id}",
+                                    "AcademicName": co_name,
+                                    "Affiliation": co_affiliation,
+                                    "ScholarProfileImageURL": str(co_picture) if co_picture else None,
+                                    "OrganisationalDomain": co_email_domain,
+                                }
+                            )
+
+                        if coauthor_links_to_create:
+                            researcher_co_author_repo.model.objects.bulk_create(
+                                coauthor_links_to_create,
+                                batch_size=500,
+                                ignore_conflicts=True,
+                            )
                     Research.objects.bulk_create(research_to_create, batch_size=200)
 
-                    # map created
                     created_map = {
                         r.pubURL: r
                         for r in Research.objects.filter(pubURL__in=[r.pubURL for r in research_to_create])
@@ -302,8 +379,8 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                                     research=research_obj,
                                     researcher=researcher_instance,
                                     memberAcademicName=member["academic_name"],
-                                    memberScholarProfileURL=member["scholar_id"],  
-                                )  
+                                    memberScholarProfileURL=member["scholar_id"],
+                                )
                             )
                             contributions_payload.append(
                                 {
@@ -314,14 +391,14 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                                     "MemberAcademicName": member["academic_name"],
                                     "memberOrcid": None,
                                     "memberPositionInSearch": str(idx),
-                                    "MemberScholarId":member["scholar_id"]
+                                    "MemberScholarId": member["scholar_id"],
                                 }
                             )
 
                         new_researches_payload.append(
                             build_research_payload(
                                 title=title,
-                                pub_year=str(pub_year),
+                                pub_year=int(pub_year),
                                 journal=journal,
                                 publisher=publisher,
                                 no_of_citations=int(no_of_citations or 0),
@@ -354,7 +431,6 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
             except Exception as e:
                 raise DatabaseError("Error while fetching researches", extra={"reason": str(e)})
 
-            # publish (outside transaction)
             researcher_payload = {
                 "NationalNumber": researcher_instance.nationalNumber,
                 "ORCID": researcher_instance.ORCID,
@@ -373,6 +449,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                 "ResearcherCites": new_researcher_cites_payload,
                 "Interests": new_interests_payload,
                 "Researches": new_researches_payload,
+                "CoAuthors": co_authors_payload,
             }
 
             correlation_id = str(researcher_nationalNumber) if researcher_nationalNumber else None
@@ -388,7 +465,11 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
 
             cache_service.delete(f"{researcher_nationalNumber}ScholarProfile: ")
             cache_service.delete(f"{researcher_nationalNumber}Orcid: ")
-            return {"detail": "Added & Published", "new_researches_count": len(new_researches_payload)}
+            return {
+                "detail": "Added & Published",
+                "new_researches_count": len(new_researches_payload),
+                "co_authors_count": len(co_authors_payload),
+            }
 
         except (InvalidInputError, NoResearchesFoundError, ConnectionError, DatabaseError, NoResearchesToAddError):
             raise

@@ -12,7 +12,7 @@ class Research(models.Model):
     DOI = models.CharField(max_length = 100 , null=True, blank=True)
     title = models.TextField()
     Source = models.TextField()
-    pubYear = models.TextField(blank=True , null = True)
+    pubYear = models.IntegerField(blank=True , null = True)
     pubDate = models.TextField(blank=True , null= True)
     journal = models.TextField(blank=True , null = True)
     publisher = models.TextField(blank=True , null = True)

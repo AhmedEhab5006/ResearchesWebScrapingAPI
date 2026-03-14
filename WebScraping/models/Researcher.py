@@ -4,7 +4,7 @@ from django.db import models
 class Researcher(models.Model):
   
     nationalNumber = models.CharField(max_length = 15 , primary_key=True , default= '0') 
-    ORCID = models.TextField()
+    ORCID = models.TextField(null= True , blank= True)
     scholarProfileLink = models.TextField()
     academicName = models.TextField(null=True , blank=True)
     scholarProfileImageURL = models.TextField(null=True , blank=True)

@@ -7,3 +7,5 @@ from .ResearchContributions import ResearchContributions
 from .ResearchIndex import ResearchIndex
 from .ResearchCites import ResearchCites
 from .Interest import Interest
+from .CoAuthor import CoAuthor
+from .ResearcherCoAuthor import ResearcherCoAuthor
