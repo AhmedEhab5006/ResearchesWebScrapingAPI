@@ -32,7 +32,7 @@ def parse_coauthors(author_field, author_ids):
 def build_research_payload(
     *,
     title: str,
-    pub_year: str,
+    pub_year: int,
     journal: str,
     publisher: str,
     no_of_citations: int,
@@ -47,10 +47,9 @@ def build_research_payload(
     created_at: str | None,
 ) -> Dict[str, Any]:
     return {
-        "DOI": "Not Avaliable",
         "Title": title,
         "Source": "Google Scholar",
-        "PubYear": str(pub_year),
+        "PubYear": pub_year,
         "PubDate": None,
         "Journal": journal,
         "Publisher": publisher,

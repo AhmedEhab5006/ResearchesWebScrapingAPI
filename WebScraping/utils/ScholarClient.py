@@ -29,10 +29,18 @@ class ScholarClient:
     def fetch_author(self, author_id: str) -> Dict[str, Any]:
         try: 
             author = self.call(lambda: scholarly.search_author_id(author_id))
-            author = self.call(lambda: scholarly.fill(author, sections=["basics", "indices", "counts" , "coauthors"]))
-            author = self.call(lambda: scholarly.fill(author, sections=["publications"]))
-            author = self.call(lambda: scholarly.fill(author))
-
+            author = self.call(
+            lambda: scholarly.fill(
+                    author,
+                    sections=[
+                        "basics",
+                        "indices",
+                        "counts",
+                        "coauthors",
+                        "publications"
+                    ]
+                )
+            )
             return author
         except Exception as e:
             print(e)

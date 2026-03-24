@@ -62,9 +62,9 @@ CORS_ALLOWED_ORIGINS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
-        "scholar_nn": "600/hour",
-        "scholar_profile": "200/hour",
-        "scholar_global": "800/min",
+        "scholar_nn": "6/hour",
+        "scholar_profile": "2/hour",
+        "scholar_global": "8/min",
     },
     "EXCEPTION_HANDLER": "WebScraping.Middlewares.GlobalExceptionMiddleware.custom_exception_handler",
 }
