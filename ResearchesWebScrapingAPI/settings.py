@@ -97,15 +97,13 @@ CORS_ALLOW_CREDENTIALS = True
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'HelwanPortalSystemResearches',
+        'NAME': 'django_db',
         'USER': 'postgres',
-        'PASSWORD': '12345',
-        'HOST': 'localhost',     
+        'PASSWORD': 'postgres',
+        'HOST': 'postgres',
         'PORT': '5432',
-        "CONN_MAX_AGE": 0         
     }
 }
-
 
 CACHES = {
     "default": {

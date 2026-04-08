@@ -33,6 +33,61 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
         self.client = ScholarClient(min_delay=10.0, max_delay=20.0, max_retries=5)
         
 
+    def check_what_to_fetch(
+        self,
+        researcher_nationalNumber: str,
+        publications: List[Dict[str, Any]],
+        coauthors: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+
+        researcher_repo = ResearcherRepo()
+        co_author_repo = CoAuthorRepo()
+
+        researcher = researcher_repo.model.objects.filter(
+            nationalNumber=researcher_nationalNumber
+        ).first()
+
+        pub_urls = [
+            self.client.get_pub_url_fast(pub)
+            for pub in publications
+            if self.client.get_pub_url_fast(pub)
+        ]
+
+        existing_pub_urls = set(
+            Research.objects.filter(pubURL__in=pub_urls)
+            .values_list("pubURL", flat=True)
+        )
+
+        missing_publications = [
+            pub for pub in publications
+            if self.client.get_pub_url_fast(pub)
+            not in existing_pub_urls
+        ]
+
+        coauthor_ids = [c.get("scholar_id") for c in coauthors if c.get("scholar_id")]
+
+        existing_coauthors = set(
+            co_author_repo.model.objects.filter(
+                scholarProfileLink__in=coauthor_ids
+            ).values_list("scholarProfileLink", flat=True)
+        )
+
+        missing_coauthors = [
+            c for c in coauthors
+            if c.get("scholar_id") not in existing_coauthors
+        ]
+
+        return {
+            "profile_exists": researcher is not None,
+            "missing_publications": missing_publications,
+            "missing_coauthors": missing_coauthors,
+            "existing_publications_count": len(existing_pub_urls),
+            "incoming_publications_count": len(publications),
+            "existing_coauthors_count": len(existing_coauthors),
+            "incoming_coauthors_count": len(coauthors),
+        }
+    
+    
     def extract_author_id(self, profile_url: str) -> str:
         match = re.search(r"user=([a-zA-Z0-9_-]+)", str(profile_url))
         if not match:
@@ -284,7 +339,7 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                 valid_publications.append(pub_data)
 
             if not research_to_create:
-                raise NoResearchesToAddError("No researches to add (already exist)")
+                print("No researches to add (already exist)")
 
             Research.objects.bulk_create(research_to_create, batch_size=200)
 
