@@ -65,4 +65,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Use entrypoint script to manage both Celery and Gunicorn
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["start"]

@@ -4,10 +4,6 @@ set -e
 # Function to cleanup processes on exit
 cleanup() {
     echo "Caught signal, shutting down gracefully..."
-    if [ ! -z "$CELERY_PID" ]; then
-        kill $CELERY_PID 2>/dev/null || true
-        wait $CELERY_PID 2>/dev/null || true
-    fi
     exit 0
 }
 
@@ -15,7 +11,7 @@ cleanup() {
 trap cleanup SIGTERM SIGINT
 
 echo "=========================================="
-echo "Django + Celery Application Startup"
+echo "Django Application Startup"
 echo "=========================================="
 
 # Only run migrations and collectstatic on startup
@@ -29,18 +25,7 @@ if [ "$1" = "start" ] || [ -z "$1" ]; then
     python manage.py collectstatic --noinput --clear || echo "Collectstatic failed, continuing anyway..."
     
     echo ""
-    echo "Step 3: Starting Celery worker in background..."
-    celery -A ResearchesWebScrapingAPI worker \
-        -l ${CELERY_LOG_LEVEL:-info} \
-        -P solo \
-        --concurrency=1 \
-        --logfile=/app/logs/celery.log \
-        &
-    CELERY_PID=$!
-    echo "Celery worker started with PID: $CELERY_PID"
-    
-    echo ""
-    echo "Step 4: Starting Gunicorn web server..."
+    echo "Step 3: Starting Gunicorn web server..."
     echo "=========================================="
     echo ""
     

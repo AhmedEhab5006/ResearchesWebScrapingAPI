@@ -9,7 +9,7 @@ from .config import (
     DEAD_LETTER_QUEUE,
 )
 
-def get_connection(host="localhost"):
+def get_connection(host="rabbitmq"):
     params = pika.ConnectionParameters(host)
     return pika.BlockingConnection(params)
 

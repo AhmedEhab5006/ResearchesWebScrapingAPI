@@ -9,7 +9,7 @@ def publish_message(
     routing_key: str,
     payload: dict,
     correlation_id: str | None = None,
-    host: str = "localhost"
+    host: str = "rabbitmq"
 ) -> str:
 
     if correlation_id is None:

@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-&iv0f9r@a11us)s6q$lzm9m&q4_&dwydf^q-=(-d-_hg&%^5&4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -58,6 +58,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:5173",
     "https://yourdomain.com",
+    "http://localhost",
 ]
 
 REST_FRAMEWORK = {
@@ -108,13 +109,13 @@ DATABASES = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/0",  
+        "LOCATION": "redis://redis:6379/0",  
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
     
         },
         "KEY_PREFIX": "myapp", 
-        "TIMEOUT": 60 * 10,         
+        "TIMEOUT": None,         
         }
 }
 
@@ -159,8 +160,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-CELERY_BROKER_URL = "redis://localhost:6379/0"   # or RabbitMQ
-CELERY_RESULT_BACKEND = "redis://localhost:6379/1"
+CELERY_BROKER_URL = "redis://redis:6379/0"   # or RabbitMQ
+CELERY_RESULT_BACKEND = "redis://redis:6379/1"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
