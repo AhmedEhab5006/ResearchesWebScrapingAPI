@@ -6,7 +6,7 @@ T = TypeVar("T")
 
 
 class CacheService:
-    def __init__(self, default_timeout: int = 300):
+    def __init__(self, default_timeout):
         self.default_timeout = default_timeout
 
     def set(self, key: str, value: T, timeout: Optional[int] = None) -> None:

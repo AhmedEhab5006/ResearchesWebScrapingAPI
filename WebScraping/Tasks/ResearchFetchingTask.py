@@ -5,7 +5,7 @@ from ..Services.FetchingResearchesByGoogleScholarProfileLink import (
 from .PublicationFetchingTask import fetch_publication_task
 from .FinializingTask import finalize_fetch_task
 from ..Services.CacheService import CacheService
-cache_service = CacheService(default_timeout=60 * 15)
+cache_service = CacheService(default_timeout=None)
 
 
 @shared_task(
