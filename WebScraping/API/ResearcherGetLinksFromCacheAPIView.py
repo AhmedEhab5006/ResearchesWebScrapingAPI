@@ -8,7 +8,7 @@ from ..Services.CacheService import CacheService
 
 class ResearcherLinksView(APIView):
     def get(self, request):
-        cache_service = CacheService()
+        cache_service = CacheService(None)
 
         # Convert QueryDict to dict
         data = request.query_params.dict()
