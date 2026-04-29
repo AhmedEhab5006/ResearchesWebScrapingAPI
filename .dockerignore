@@ -73,4 +73,3 @@ Thumbs.db
 
 # Project specific
 storage/
-migrations/ (keep this if you need migrations, comment out otherwise)
