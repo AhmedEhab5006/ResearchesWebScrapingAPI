@@ -18,7 +18,7 @@ echo "=========================================="
 if [ "$1" = "start" ] || [ -z "$1" ]; then
     echo ""
     echo "Step 1: Running Django migrations..."
-    python manage.py migrate --noinput || echo "Migration failed, continuing anyway..."
+    python manage.py migrate --noinput 
     
     echo ""
     echo "Step 2: Collecting static files..."

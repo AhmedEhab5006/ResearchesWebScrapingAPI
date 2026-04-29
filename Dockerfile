@@ -61,7 +61,7 @@ EXPOSE 8000
 
 # Health check for web server
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD /home/django/.local/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()" || exit 1
+    CMD /home/django/.local/bin/python -c "import urllib.request; urllib.request.urlopen('http://172.1.50.98:8000/').read()" || exit 1
 
 # Use entrypoint script to manage both Celery and Gunicorn
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
