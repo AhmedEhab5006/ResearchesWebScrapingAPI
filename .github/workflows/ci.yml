@@ -28,7 +28,7 @@ jobs:
       - name: Build & Push Django
         run: |
           TAG=${GITHUB_SHA}
-          docker build -t ghcr.io/${{ github.actor }}/django-service:$TAG ./ResearchesWebScrapingAPI
-          docker push ghcr.io/${{ github.actor }}/django-service:$TAG
+          docker build -t ghcr.io/ahmedehab5006/django-service:$TAG ./ResearchesWebScrapingAPI
+          docker push ghcr.io/ahmedehab5006/django-service:$TAG
 
       
