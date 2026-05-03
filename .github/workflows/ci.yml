@@ -23,16 +23,12 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & Push Django
         run: |
           TAG=${GITHUB_SHA}
-          docker build -t ghcr.io/${{ github.repository_owner }}/django-service:$TAG ./ResearchesWebScrapingAPI
-          docker push ghcr.io/${{ github.repository_owner }}/django-service:$TAG
+          docker build -t ghcr.io/${{ github.actor }}/django-service:$TAG ./ResearchesWebScrapingAPI
+          docker push ghcr.io/${{ github.actor }}/django-service:$TAG
 
-      - name: Build & Push Celery Worker
-        run: |
-          TAG=${GITHUB_SHA}
-          docker build -t ghcr.io/${{ github.repository_owner }}/celery-worker:$TAG ./ResearchesWebScrapingAPI
-          docker push ghcr.io/${{ github.repository_owner }}/celery-worker:$TAG
+      
