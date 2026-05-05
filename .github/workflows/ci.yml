@@ -29,6 +29,7 @@ jobs:
         run: |
           TAG=${GITHUB_SHA}
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          IMAGE=ghcr.io/${REPO}/django-service:${TAG}
-          docker build -t $IMAGE -f ./Dockerfile .
-          docker push $IMAGE
+          IMAGE=ghcr.io/${REPO}/django-service
+          docker build -t $IMAGE:$TAG -t $IMAGE:latest -f ./Dockerfile .
+          docker push $IMAGE:$TAG
+          docker push $IMAGE:latest
