@@ -30,7 +30,7 @@ class ResearchContributions(models.Model):
   
     memberOrcid = models.TextField(null=True, blank=True)
     memberPositionInSearch = models.TextField(null=True, blank=True)
-    memberAcademicName = models.TextField() 
+    memberAcademicName = models.TextField(blank=True , null = True) 
     memberScholarProfileURL = models.TextField(null=True, blank=True) 
 
 
