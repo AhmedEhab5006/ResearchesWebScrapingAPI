@@ -5,8 +5,12 @@ from ..Services.FetchingResearchesByGoogleScholarProfileLink import (
 from .PublicationFetchingTask import fetch_publication_task
 from .FinializingTask import finalize_fetch_task
 from ..Services.CacheService import CacheService
-cache_service = CacheService(default_timeout=None)
+import redis
+from datetime import datetime, timezone, timedelta
 
+
+cache_service = CacheService(default_timeout=60 * 15)
+redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
 @shared_task(
     bind=True,
@@ -26,6 +30,8 @@ def fetch_researches_task(self, profile_url: str, researcher_nationalNumber: str
 
     publications = author.get("publications", [])
     coauthors = author.get("coauthors", [])
+    total = len(publications)
+
 
     coauthors_data = [
         service.prepare_coauthor_data(coauthor)
@@ -33,7 +39,11 @@ def fetch_researches_task(self, profile_url: str, researcher_nationalNumber: str
     ]
 
     publication_jobs = [
-        fetch_publication_task.s(pub)
+        fetch_publication_task.s(
+            pub,
+            total,
+            researcher_nationalNumber
+        )        
         for pub in publications
     ]
 
@@ -43,6 +53,27 @@ def fetch_researches_task(self, profile_url: str, researcher_nationalNumber: str
         orcid=orcid,
         author=author,
         coauthors_data=coauthors_data,
+    )
+
+
+    redis_client.set(f"research_counter:{researcher_nationalNumber}", 0)
+
+    started_at = datetime.now().strftime("%I:%M %p")    
+    progress_state = {
+        "status": "in_progress",
+        "current": 0,
+        "total": total,
+        "percentage": 0,
+        "started_at": started_at,
+        "estimated_finish": (
+            datetime.now() + timedelta(minutes=total)
+        ).strftime("%I:%M %p")  
+    }
+
+    cache_service.set(
+        f"research_progress:{researcher_nationalNumber}",
+        progress_state,
+        timeout=None
     )
 
     if publication_jobs:

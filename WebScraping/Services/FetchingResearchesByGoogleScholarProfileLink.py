@@ -302,10 +302,10 @@ class FetchingResearchesByProfileLinkGoogleScholarService:
                         "OrganisationalDomain": co_email_domain,
                     }
                 )            
-                existing_urls = set(
-                Research.objects.filter(
-                    pubURL__in=[p["pub_url"] for p in publications_data if p["pub_url"]]
-                ).values_list("pubURL", flat=True)
+            existing_urls = set(
+            Research.objects.filter(
+                pubURL__in=[p["pub_url"] for p in publications_data if p["pub_url"]]
+            ).values_list("pubURL", flat=True)
             )
 
             research_to_create = []
