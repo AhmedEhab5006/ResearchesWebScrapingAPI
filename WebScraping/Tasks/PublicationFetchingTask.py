@@ -6,7 +6,7 @@ import json
 import redis
 from ..Services.CacheService import CacheService
 
-redis_client = redis.Redis(host="localhost", port=6379, db=0)
+redis_client = redis.Redis(host="redis", port=6379, db=0)
 cache_service = CacheService(default_timeout=60 * 15)
 
 
